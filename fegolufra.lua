@@ -1,4 +1,5 @@
--- Fegolufra Script v6 - Debug + Universal Grab
+-- Fegolufra Script v7
+-- Line via ScreenGui + Instant Grab
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -8,7 +9,6 @@ local player = Players.LocalPlayer
 local Settings = {
     AutoGrab = false,
     ESP = false,
-    Debug = false,
     GrabDist = 30,
 }
 
@@ -19,8 +19,8 @@ gui.ResetOnSpawn = false
 gui.Parent = player:WaitForChild("PlayerGui")
 
 local main = Instance.new("Frame", gui)
-main.Size = UDim2.new(0, 200, 0, 200)
-main.Position = UDim2.new(0.02, 0, 0.3, 0)
+main.Size = UDim2.new(0, 180, 0, 120)
+main.Position = UDim2.new(0.02, 0, 0.35, 0)
 main.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
 main.BorderSizePixel = 0
 main.Active = true
@@ -30,7 +30,7 @@ Instance.new("UICorner", main).CornerRadius = UDim.new(0, 8)
 local ttl = Instance.new("TextLabel", main)
 ttl.Size = UDim2.new(1,0,0,26)
 ttl.BackgroundColor3 = Color3.fromRGB(100, 0, 180)
-ttl.Text = "FEGOLUFRA v6"
+ttl.Text = "FEGOLUFRA v7"
 ttl.TextColor3 = Color3.fromRGB(255,255,255)
 ttl.TextSize = 12
 ttl.Font = Enum.Font.GothamBold
@@ -54,12 +54,11 @@ local function mkBtn(txt, y, key)
 end
 
 mkBtn("AUTOGRAB", 32, "AutoGrab")
-mkBtn("ESP", 63, "ESP")
-mkBtn("DEBUG (print)", 94, "Debug")
+mkBtn("ESP + LINEA", 63, "ESP")
 
--- ESP
+-- ESP text label
 local espL = Instance.new("TextLabel", gui)
-espL.Size = UDim2.new(0, 300, 0, 25)
+espL.Size = UDim2.new(0, 300, 0, 22)
 espL.Position = UDim2.new(0.5, -150, 0, 5)
 espL.BackgroundColor3 = Color3.fromRGB(10, 10, 20)
 espL.BackgroundTransparency = 0.3
@@ -71,102 +70,57 @@ espL.TextStrokeTransparency = 0
 espL.Visible = false
 Instance.new("UICorner", espL).CornerRadius = UDim.new(0, 6)
 
--- Drawing line
-local line = nil
-pcall(function()
-    line = Drawing.new("Line")
-    line.Visible = false
-    line.Thickness = 2
-end)
+-- LINE: usar 20 frames chicos como linea
+local lineFrames = {}
+for i = 1, 20 do
+    local f = Instance.new("Frame", gui)
+    f.Size = UDim2.new(0, 4, 0, 4)
+    f.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+    f.BorderSizePixel = 0
+    f.Visible = false
+    f.AnchorPoint = Vector2.new(0.5, 0.5)
+    f.ZIndex = 999
+    Instance.new("UICorner", f).CornerRadius = UDim.new(1, 0)
+    lineFrames[i] = f
+end
 
--- ========== GRAB UNIVERSAL ==========
+-- ========== GRAB ==========
 local function universalGrab()
     local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
 
     for _, obj in pairs(workspace:GetDescendants()) do
-        if obj:IsA("BasePart") and obj.Name ~= "Terrain" and obj.Name ~= "Baseplate" then
-            local dist = (obj.Position - hrp.Position).Magnitude
-            if dist <= Settings.GrabDist then
-                -- Buscar hijos que indiquen que es agarrable
-                local hasHandle = obj:FindFirstChild("Handle")
-                local hasCD = obj:FindFirstChildOfClass("ClickDetector")
-                local hasPP = obj:FindFirstChildOfClass("ProximityPrompt")
-                local hasTI = obj:FindFirstChildOfClass("TouchTransmitter")
-
-                if hasHandle or hasCD or hasPP or hasTI then
-                    -- Spam touch
-                    for i = 1, 5 do
-                        pcall(function()
-                            firetouchinterest(hrp, obj, 0)
-                        end)
-                        task.wait(0.02)
-                        pcall(function()
-                            firetouchinterest(hrp, obj, 1)
-                        end)
-                        task.wait(0.02)
-                    end
-
-                    -- Fire CD
-                    if hasCD then
-                        pcall(function() fireclickdetector(hasCD) end)
-                    end
-
-                    -- Fire PP
-                    if hasPP then
-                        pcall(function() fireproximityprompt(hasPP, 0) end)
-                    end
-                end
-
-                -- Tambien intentar con Tool en backpack
-                if obj:IsA("Tool") or obj:IsA("BackpackItem") then
-                    for i = 1, 5 do
-                        pcall(function()
-                            firetouchinterest(hrp, obj, 0)
-                        end)
-                        task.wait(0.02)
-                        pcall(function()
-                            firetouchinterest(hrp, obj, 1)
-                        end)
-                        task.wait(0.02)
-                    end
-                end
-            end
-        end
-    end
-end
-
--- ========== DEBUG ==========
-local function debugScan()
-    print("========== FEGOLUFRA DEBUG ==========")
-    local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-    if not hrp then print("No HRP") return end
-
-    local count = 0
-    for _, obj in pairs(workspace:GetDescendants()) do
         if obj:IsA("BasePart") then
-            local dist = (obj.Position - hrp.Position).Magnitude
-            if dist <= 50 then
-                count = count + 1
-                local children = {}
-                for _, c in pairs(obj:GetChildren()) do
-                    table.insert(children, c.ClassName)
+            if (obj.Position - hrp.Position).Magnitude <= Settings.GrabDist then
+                local grabbable = obj:FindFirstChild("Handle") or obj:FindFirstChildOfClass("ClickDetector") or obj:FindFirstChildOfClass("ProximityPrompt") or obj:FindFirstChildOfClass("TouchTransmitter") or obj:IsA("Tool") or obj:IsA("BackpackItem")
+
+                if grabbable then
+                    for i = 1, 5 do
+                        pcall(function() firetouchinterest(hrp, obj, 0) end)
+                        task.wait(0.02)
+                        pcall(function() firetouchinterest(hrp, obj, 1) end)
+                        task.wait(0.02)
+                    end
+
+                    local cd = obj:FindFirstChildOfClass("ClickDetector")
+                    if cd then pcall(function() fireclickdetector(cd) end) end
+
+                    local pp = obj:FindFirstChildOfClass("ProximityPrompt")
+                    if pp then pcall(function() fireproximityprompt(pp, 0) end) end
                 end
-                print("[" .. count .. "] " .. obj.Name .. " | Dist: " .. math.floor(dist) .. " | Children: " .. table.concat(children, ", "))
             end
-        elseif obj:IsA("Tool") then
-            count = count + 1
-            print("[" .. count .. "] TOOL: " .. obj.Name)
         end
     end
-    print("Total: " .. count .. " objects")
-    print("====================================")
 end
 
--- ========== ESP ==========
+-- ========== ESP + LINE ==========
 local function espScan()
     local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-    if not hrp then espL.Visible = false if line then line.Visible = false end return end
+    if not hrp then
+        espL.Visible = false
+        for _, f in pairs(lineFrames) do f.Visible = false end
+        return
+    end
 
     local cam = workspace.CurrentCamera
     local bestObj, bestVal, bestN, bestC = nil, 0, "NINGUNO", Color3.fromRGB(200,200,200)
@@ -177,7 +131,6 @@ local function espScan()
             local val = 0
             local col = Color3.fromRGB(200,200,200)
 
-            -- Buscar cualquier valor por nombre
             if string.find(name, "ultimate") then val = 100000 col = Color3.fromRGB(255,255,255)
             elseif string.find(name, "diamond") then val = 50000 col = Color3.fromRGB(0,255,255)
             elseif string.find(name, "golden") then val = 25000 col = Color3.fromRGB(255,215,0)
@@ -188,10 +141,8 @@ local function espScan()
             elseif string.find(name, "rare") then val = 150 col = Color3.fromRGB(0,100,255)
             elseif string.find(name, "uncommon") then val = 50 col = Color3.fromRGB(0,200,0)
             elseif string.find(name, "common") then val = 10 col = Color3.fromRGB(150,150,150)
-            -- Si tiene ClickDetector o ProximityPrompt, marcarlo
             elseif obj:FindFirstChildOfClass("ClickDetector") or obj:FindFirstChildOfClass("ProximityPrompt") or obj:FindFirstChild("Handle") then
-                val = 1
-                col = Color3.fromRGB(255, 255, 0)
+                val = 1 col = Color3.fromRGB(255, 255, 0)
             end
 
             if val > 0 and (obj.Position - hrp.Position).Magnitude <= 500 then
@@ -205,21 +156,31 @@ local function espScan()
         end
     end
 
+    -- Text
     espL.Visible = true
     espL.Text = "VALIOSO: " .. bestN .. " $" .. tostring(bestVal)
     espL.TextColor3 = bestC
 
-    -- Line
-    if line and bestObj then
+    -- Line (20 dots from bottom center to object)
+    if bestObj then
         local sp, on = cam:WorldToViewportPoint(bestObj.Position)
         if on then
-            line.From = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y * 0.7)
-            line.To = Vector2.new(sp.X, sp.Y)
-            line.Color = bestC
-            line.Visible = true
+            local startX = cam.ViewportSize.X / 2
+            local startY = cam.ViewportSize.Y * 0.75
+
+            for i, f in ipairs(lineFrames) do
+                local t = i / #lineFrames
+                local x = startX + (sp.X - startX) * t
+                local y = startY + (sp.Y - startY) * t
+                f.Position = UDim2.new(0, x, 0, y)
+                f.BackgroundColor3 = bestC
+                f.Visible = true
+            end
         else
-            line.Visible = false
+            for _, f in pairs(lineFrames) do f.Visible = false end
         end
+    else
+        for _, f in pairs(lineFrames) do f.Visible = false end
     end
 end
 
@@ -229,14 +190,10 @@ spawn(function()
         if Settings.AutoGrab then pcall(universalGrab) end
         if Settings.ESP then pcall(espScan) else
             espL.Visible = false
-            if line then line.Visible = false end
-        end
-        if Settings.Debug then
-            Settings.Debug = false
-            pcall(debugScan)
+            for _, f in pairs(lineFrames) do f.Visible = false end
         end
         task.wait(0.05)
     end
 end)
 
-print("Fegolufra v6 - USA BOTON DEBUG Y MANDAME EL LOG")
+print("Fegolufra v7 Loaded")
