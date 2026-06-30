@@ -1,5 +1,5 @@
--- Fegolufra Script v7
--- Line via ScreenGui + Instant Grab
+-- Fegolufra Script v8
+-- Targets actual brainrot names
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -9,7 +9,7 @@ local player = Players.LocalPlayer
 local Settings = {
     AutoGrab = false,
     ESP = false,
-    GrabDist = 30,
+    GrabDist = 50,
 }
 
 -- GUI
@@ -30,7 +30,7 @@ Instance.new("UICorner", main).CornerRadius = UDim.new(0, 8)
 local ttl = Instance.new("TextLabel", main)
 ttl.Size = UDim2.new(1,0,0,26)
 ttl.BackgroundColor3 = Color3.fromRGB(100, 0, 180)
-ttl.Text = "FEGOLUFRA v7"
+ttl.Text = "FEGOLUFRA v8"
 ttl.TextColor3 = Color3.fromRGB(255,255,255)
 ttl.TextSize = 12
 ttl.Font = Enum.Font.GothamBold
@@ -56,10 +56,10 @@ end
 mkBtn("AUTOGRAB", 32, "AutoGrab")
 mkBtn("ESP + LINEA", 63, "ESP")
 
--- ESP text label
+-- ESP text
 local espL = Instance.new("TextLabel", gui)
-espL.Size = UDim2.new(0, 300, 0, 22)
-espL.Position = UDim2.new(0.5, -150, 0, 5)
+espL.Size = UDim2.new(0, 400, 0, 22)
+espL.Position = UDim2.new(0.5, -200, 0, 5)
 espL.BackgroundColor3 = Color3.fromRGB(10, 10, 20)
 espL.BackgroundTransparency = 0.3
 espL.Text = ""
@@ -70,11 +70,11 @@ espL.TextStrokeTransparency = 0
 espL.Visible = false
 Instance.new("UICorner", espL).CornerRadius = UDim.new(0, 6)
 
--- LINE: usar 20 frames chicos como linea
+-- Line dots
 local lineFrames = {}
-for i = 1, 20 do
+for i = 1, 25 do
     local f = Instance.new("Frame", gui)
-    f.Size = UDim2.new(0, 4, 0, 4)
+    f.Size = UDim2.new(0, 6, 0, 6)
     f.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
     f.BorderSizePixel = 0
     f.Visible = false
@@ -84,31 +84,120 @@ for i = 1, 20 do
     lineFrames[i] = f
 end
 
+-- ========== FIND BRAINROTS ==========
+local ValueNames = {
+    "ultimate", "diamond", "golden", "brainrot", "mythic",
+    "legendary", "epic", "rare", "uncommon", "common",
+    "Ignore", "bigger", "Bigger", "BIGGER"
+}
+
+local function getVal(name)
+    local l = string.lower(name)
+    if string.find(l, "ultimate") then return 100000, Color3.fromRGB(255,255,255) end
+    if string.find(l, "diamond") then return 50000, Color3.fromRGB(0,255,255) end
+    if string.find(l, "golden") then return 25000, Color3.fromRGB(255,215,0) end
+    if string.find(l, "brainrot") then return 10000, Color3.fromRGB(255,0,255) end
+    if string.find(l, "mythic") then return 5000, Color3.fromRGB(255,0,0) end
+    if string.find(l, "legendary") then return 1500, Color3.fromRGB(255,150,0) end
+    if string.find(l, "epic") then return 500, Color3.fromRGB(150,0,200) end
+    if string.find(l, "rare") then return 150, Color3.fromRGB(0,100,255) end
+    if string.find(l, "uncommon") then return 50, Color3.fromRGB(0,200,0) end
+    if string.find(l, "common") then return 10, Color3.fromRGB(150,150,150) end
+    if string.find(l, "ignore") or string.find(l, "bigger") then return 100000, Color3.fromRGB(255,215,0) end
+    return 0, Color3.fromRGB(200,200,200)
+end
+
+-- Buscar brainrots: Model, Part, o cualquier cosa con "Brainrot" o "Ignore" en el nombre
+local function findBrainrots()
+    local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return {} end
+
+    local results = {}
+
+    -- Buscar en todo workspace
+    for _, obj in pairs(workspace:GetDescendants()) do
+        local name = obj.Name
+        local lname = string.lower(name)
+
+        -- Si el nombre contiene "brainrot", "ignore", "bigger"
+        if string.find(lname, "brainrot") or string.find(lname, "ignore") or string.find(lname, "bigger") then
+            local pos = nil
+
+            -- Es un Model
+            if obj:IsA("Model") then
+                local primary = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+                if primary then
+                    pos = primary.Position
+                end
+            -- Es una BasePart
+            elseif obj:IsA("BasePart") then
+                pos = obj.Position
+            end
+
+            if pos and (pos - hrp.Position).Magnitude <= 500 then
+                local val, col = getVal(name)
+                table.insert(results, {obj = obj, pos = pos, val = val, col = col, name = name})
+            end
+        end
+    end
+
+    -- Ordenar por valor
+    table.sort(results, function(a, b) return a.val > b.val end)
+
+    return results
+end
+
 -- ========== GRAB ==========
-local function universalGrab()
+local lastGrab = 0
+local function grabBrainrot()
     local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
+    if tick() - lastGrab < 0.2 then return end
 
-    for _, obj in pairs(workspace:GetDescendants()) do
-        if obj:IsA("BasePart") then
-            if (obj.Position - hrp.Position).Magnitude <= Settings.GrabDist then
-                local grabbable = obj:FindFirstChild("Handle") or obj:FindFirstChildOfClass("ClickDetector") or obj:FindFirstChildOfClass("ProximityPrompt") or obj:FindFirstChildOfClass("TouchTransmitter") or obj:IsA("Tool") or obj:IsA("BackpackItem")
+    local brainrots = findBrainrots()
+    for _, b in ipairs(brainrots) do
+        if b.pos and (b.pos - hrp.Position).Magnitude <= Settings.GrabDist then
+            lastGrab = tick()
 
-                if grabbable then
-                    for i = 1, 5 do
-                        pcall(function() firetouchinterest(hrp, obj, 0) end)
-                        task.wait(0.02)
-                        pcall(function() firetouchinterest(hrp, obj, 1) end)
-                        task.wait(0.02)
-                    end
-
-                    local cd = obj:FindFirstChildOfClass("ClickDetector")
-                    if cd then pcall(function() fireclickdetector(cd) end) end
-
-                    local pp = obj:FindFirstChildOfClass("ProximityPrompt")
-                    if pp then pcall(function() fireproximityprompt(pp, 0) end) end
+            -- Touch el objeto principal
+            if b.obj:IsA("BasePart") then
+                for i = 1, 8 do
+                    pcall(function() firetouchinterest(hrp, b.obj, 0) end)
+                    task.wait(0.02)
+                    pcall(function() firetouchinterest(hrp, b.obj, 1) end)
+                    task.wait(0.02)
                 end
             end
+
+            -- Touch todas las partes del model
+            if b.obj:IsA("Model") then
+                for _, part in pairs(b.obj:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        for i = 1, 5 do
+                            pcall(function() firetouchinterest(hrp, part, 0) end)
+                            task.wait(0.02)
+                            pcall(function() firetouchinterest(hrp, part, 1) end)
+                            task.wait(0.02)
+                        end
+                    end
+                end
+            end
+
+            -- ClickDetector
+            local cd = b.obj:FindFirstChildOfClass("ClickDetector")
+            if cd then pcall(function() fireclickdetector(cd) end) end
+
+            -- ProximityPrompt
+            local pp = b.obj:FindFirstChildOfClass("ProximityPrompt")
+            if pp then pcall(function() fireproximityprompt(pp, 0) end) end
+
+            -- Buscar CD y PP en hijos
+            for _, child in pairs(b.obj:GetDescendants()) do
+                if child:IsA("ClickDetector") then pcall(function() fireclickdetector(child) end) end
+                if child:IsA("ProximityPrompt") then pcall(function() fireproximityprompt(child, 0) end) end
+            end
+
+            break
         end
     end
 end
@@ -122,58 +211,31 @@ local function espScan()
         return
     end
 
-    local cam = workspace.CurrentCamera
-    local bestObj, bestVal, bestN, bestC = nil, 0, "NINGUNO", Color3.fromRGB(200,200,200)
-
-    for _, obj in pairs(workspace:GetDescendants()) do
-        if obj:IsA("BasePart") then
-            local name = string.lower(obj.Name)
-            local val = 0
-            local col = Color3.fromRGB(200,200,200)
-
-            if string.find(name, "ultimate") then val = 100000 col = Color3.fromRGB(255,255,255)
-            elseif string.find(name, "diamond") then val = 50000 col = Color3.fromRGB(0,255,255)
-            elseif string.find(name, "golden") then val = 25000 col = Color3.fromRGB(255,215,0)
-            elseif string.find(name, "brainrot") then val = 10000 col = Color3.fromRGB(255,0,255)
-            elseif string.find(name, "mythic") then val = 5000 col = Color3.fromRGB(255,0,0)
-            elseif string.find(name, "legendary") then val = 1500 col = Color3.fromRGB(255,150,0)
-            elseif string.find(name, "epic") then val = 500 col = Color3.fromRGB(150,0,200)
-            elseif string.find(name, "rare") then val = 150 col = Color3.fromRGB(0,100,255)
-            elseif string.find(name, "uncommon") then val = 50 col = Color3.fromRGB(0,200,0)
-            elseif string.find(name, "common") then val = 10 col = Color3.fromRGB(150,150,150)
-            elseif obj:FindFirstChildOfClass("ClickDetector") or obj:FindFirstChildOfClass("ProximityPrompt") or obj:FindFirstChild("Handle") then
-                val = 1 col = Color3.fromRGB(255, 255, 0)
-            end
-
-            if val > 0 and (obj.Position - hrp.Position).Magnitude <= 500 then
-                if val > bestVal then
-                    bestVal = val
-                    bestObj = obj
-                    bestN = obj.Name
-                    bestC = col
-                end
-            end
-        end
-    end
+    local brainrots = findBrainrots()
+    local best = brainrots[1]
 
     -- Text
-    espL.Visible = true
-    espL.Text = "VALIOSO: " .. bestN .. " $" .. tostring(bestVal)
-    espL.TextColor3 = bestC
+    if best then
+        espL.Visible = true
+        espL.Text = "VALIOSO: " .. best.name .. " $" .. tostring(best.val)
+        espL.TextColor3 = best.col
+    else
+        espL.Visible = true
+        espL.Text = "NINGUNO CERCA"
+        espL.TextColor3 = Color3.fromRGB(200,200,200)
+    end
 
-    -- Line (20 dots from bottom center to object)
-    if bestObj then
-        local sp, on = cam:WorldToViewportPoint(bestObj.Position)
+    -- Line
+    if best and best.pos then
+        local cam = workspace.CurrentCamera
+        local sp, on = cam:WorldToViewportPoint(best.pos)
         if on then
-            local startX = cam.ViewportSize.X / 2
-            local startY = cam.ViewportSize.Y * 0.75
-
+            local sx = cam.ViewportSize.X / 2
+            local sy = cam.ViewportSize.Y * 0.8
             for i, f in ipairs(lineFrames) do
-                local t = i / #lineFrames
-                local x = startX + (sp.X - startX) * t
-                local y = startY + (sp.Y - startY) * t
-                f.Position = UDim2.new(0, x, 0, y)
-                f.BackgroundColor3 = bestC
+                local t = (i - 1) / (#lineFrames - 1)
+                f.Position = UDim2.new(0, sx + (sp.X - sx) * t, 0, sy + (sp.Y - sy) * t)
+                f.BackgroundColor3 = best.col
                 f.Visible = true
             end
         else
@@ -187,7 +249,7 @@ end
 -- ========== MAIN ==========
 spawn(function()
     while true do
-        if Settings.AutoGrab then pcall(universalGrab) end
+        if Settings.AutoGrab then pcall(grabBrainrot) end
         if Settings.ESP then pcall(espScan) else
             espL.Visible = false
             for _, f in pairs(lineFrames) do f.Visible = false end
@@ -196,4 +258,4 @@ spawn(function()
     end
 end)
 
-print("Fegolufra v7 Loaded")
+print("Fegolufra v8 Loaded - Targets: Brainrot, Ignore, Bigger")
